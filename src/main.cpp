@@ -27,13 +27,13 @@ int main(int argc, char *argv[]) {
   int transpose = config["transpose"].get<int>();
   minBlock = 2;
   float tmpsram = config["cachesize"].get<float>();
-  cachesize = tmpsram * 262144 * 0.9;
+  cachesize = tmpsram * 262144 * 0.9; // pran: what are these numbers? A: cache size in terms of 4-byte words, and only 90% is usable, rest is for metadata and tags?
   inputcachesize = cachesize;
   float tmpbandw = config["memorybandwidth"].get<float>();
-  HBMbandwidth = (tmpbandw / 4.0) * 0.6;
+  HBMbandwidth = (tmpbandw / 4.0) * 0.6; // pran: tmpbandw is I guess in bytes per cycle, and HBMbandwidth converts to words per cycle, and only 60% of that is assumed to be available for use
   int tmpPE = config["PEcnt"].get<int>();
   PEcnt = tmpPE;
-  mergecnt = tmpPE;
+  mergecnt = tmpPE; // pran: number of merge units that combine partial results into rows of C
   HBMbandwidthperPE = HBMbandwidth / PEcnt;
   int tmpbank = config["srambank"].get<int>();
   sramBank = tmpbank;
@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
                 std::to_string(tmpsram) + "MB_" + std::to_string(tmpbandw) +
                 "GBs_" + std::to_string(tmpPE) + "PEs_" +
                 std::to_string(tmpbank) + "sbanks_" + "_" + matrix_name1 + "_" +
-                matrix_name1 + "_" + printFormat[format] + "_" +
+                matrix_name1 + "_" + printFormat[format] + "_" + // pran: why not matrix_name2
                 (transpose ? "1" : "0") + ".txt")
                    .c_str(),
                "w", stdout)) {
@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
   char readbuffer[BUFFERSIZE];
 
   // read and ignore annotation '%' lines
-  while (std::cin.getline(readbuffer, BUFFERSIZE)) {
+  while (std::cin.getline(readbuffer, BUFFERSIZE)) {  // pran: getting dimesions and sparsity from command line??
     if (readbuffer[0] != '%') {
       break;
     }

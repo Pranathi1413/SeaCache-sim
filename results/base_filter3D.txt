@@ -1,0 +1,20 @@
+==== CGustSeaCache_2.000000MB_68.000000GBs_32PEs_32sbanks__filter3D_filter3D_RR_0 ====
+Matrix A: 106437 x 106437, number of non-zeros = 1406808
+*** ratio of empty 0.724659, ratio of not empty 0.275341
+*** ratio of in cache 1.000000
+** ratio tag access 48 0.500000
+** ratio tag access 16 0.471561
+Matrix B: 106437 x 106437, number of non-zeros = 1406808
+transpose: 0
+I = 106437, K = 106437, J = 106437
+MAC: 19619301   nnzC: 7069308
+
+***************** SeaCache *******************
+nnzB:1406808  K:106437  J/TJ:1  nzlB:13
+total cycle = 4148508
+load cycle = 2841, multiply cycle = 4145667, merge and writeback cycle = 0 
+total SRAM cycle = 2610336, total DRAM cycle = 4145667, total PE cycle = 613103
+DRAM access A during multiply = 410017, DRAM access B during multiply = 1658004, DRAM access C during multiply = 2077645
+DRAM access A during load = 2841, DRAM access B during load = 0, DRAM access C during merge and writeback = 0
+total DRAM access A = 412858, total DRAM access B = 1658004, total DRAM access C = 2077645 
+hitrate = 0.825524  

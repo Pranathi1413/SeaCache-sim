@@ -7,7 +7,6 @@
 #include <functional>
 #include <iostream>
 #include <map>
-#include <omp.h>
 #include <set>
 #include <sstream>
 #include <stdlib.h>

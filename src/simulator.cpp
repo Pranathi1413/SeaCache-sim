@@ -2326,7 +2326,10 @@ Only in two place :
 void calculate() {
 
   computePE = computeDramAccess = computeSramAccess = 0;
-
+  // Hari: these 3 counters add up work for the ENTIRE tile, every PE, every fiber, all lumped together
+  // only get split by PEcnt/sramBank once, right at the end (around line 2571)
+  // so there's no real per-PE timing anywhere here, just one number for the whole tile
+  
   if ((dataflow == Inner) || (dataflow == Gust)) {
 
     if (dataflow == Gust) {

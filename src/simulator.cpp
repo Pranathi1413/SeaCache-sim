@@ -2,6 +2,7 @@
 #include "dynamic.h"
 #include "estimation.h"
 #include "headers.h"
+#include "queue.h"
 #include "statistics.h"
 
 // store all the buffered C now
@@ -464,7 +465,7 @@ void updateTK() {
   }
 }
 
-bool iterate_inner_loop() {
+void iterate_inner_loop(std::any any) {
   if ((interorder == IJK) || (interorder == JIK)) {
     // adddyn
     // dynamicupdatek();
@@ -473,13 +474,15 @@ bool iterate_inner_loop() {
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 1;
+      LoopQueue.push({inner_loop_before_calculate});
+      return;
     } else {
       TK += ((ISDYNAMICK) ? dynk : kkk);
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 0;
+      LoopQueue.push({iterate_mid_loop});
+      return;
     }
   } else if ((interorder == IKJ) || (interorder == KIJ)) {
     // dynamicupdatej();
@@ -488,13 +491,15 @@ bool iterate_inner_loop() {
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 1;
+      LoopQueue.push({inner_loop_before_calculate});
+      return;
     } else {
       TJ += ((ISDYNAMICJ) ? dynj : jjj);
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 0;
+      LoopQueue.push({iterate_mid_loop});
+      return;
     }
   } else if ((interorder == JKI) || (interorder == KJI)) {
     //  printf("####  %d %d %d\n", TI, iii, I);
@@ -504,21 +509,24 @@ bool iterate_inner_loop() {
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 1;
+      LoopQueue.push({inner_loop_before_calculate});
+      return;
 
     } else {
       TI += iii;
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 0;
+      LoopQueue.push({iterate_mid_loop});
+      return;
     }
   }
 
-  return 0;
+  LoopQueue.push({iterate_mid_loop});
+  return;
 }
 
-bool iterate_mid_loop() {
+void iterate_mid_loop(std::any any) {
   if ((interorder == IKJ) || (interorder == JKI)) {
     // dynamicupdatek();
     if (TK + ((ISDYNAMICK) ? dynk : kkk) < K) {
@@ -526,13 +534,15 @@ bool iterate_mid_loop() {
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 1;
+      LoopQueue.push({reinitialize_inner});
+      return;
     } else {
       TK += ((ISDYNAMICK) ? dynk : kkk);
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 0;
+      LoopQueue.push({iterate_outer_loop});
+      return;
     }
   } else if ((interorder == IJK) || (interorder == KJI)) {
     // dynamicupdatej();
@@ -541,13 +551,15 @@ bool iterate_mid_loop() {
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 1;
+      LoopQueue.push({reinitialize_inner});
+      return;
     } else {
       TJ += ((ISDYNAMICJ) ? dynj : jjj);
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 0;
+      LoopQueue.push({iterate_outer_loop});
+      return;
     }
   } else if ((interorder == JIK) || (interorder == KIJ)) {
     // dynamicupdatei();
@@ -556,20 +568,23 @@ bool iterate_mid_loop() {
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 1;
+      LoopQueue.push({reinitialize_inner});
+      return;
     } else {
       TI += iii;
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 0;
+      LoopQueue.push({iterate_outer_loop});
+      return;
     }
   }
 
-  return 0;
+  LoopQueue.push({iterate_outer_loop});
+  return;
 }
 
-bool iterate_outer_loop() {
+void iterate_outer_loop(std::any any) {
   if ((interorder == KIJ) || (interorder == KJI)) {
     // dynamicupdatek();
     if (TK + ((ISDYNAMICK) ? dynk : kkk) < K) {
@@ -577,13 +592,15 @@ bool iterate_outer_loop() {
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 1;
+      LoopQueue.push({reinitialize_mid});
+      return;
     } else {
       TK += ((ISDYNAMICK) ? dynk : kkk);
       if (ISDYNAMICK) {
         dynamicupdatek();
       }
-      return 0;
+      LoopQueue.push({finishRun});
+      return;
     }
   } else if ((interorder == JIK) || (interorder == JKI)) {
     // dynamicupdatej();
@@ -592,13 +609,15 @@ bool iterate_outer_loop() {
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 1;
+      LoopQueue.push({reinitialize_mid});
+      return;
     } else {
       TJ += ((ISDYNAMICJ) ? dynj : jjj);
       if (ISDYNAMICJ) {
         dynamicupdatej();
       }
-      return 0;
+      LoopQueue.push({finishRun});
+      return;
     }
   } else if ((interorder == IJK) || (interorder == IKJ)) {
     // dynamicupdatei();
@@ -607,17 +626,20 @@ bool iterate_outer_loop() {
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 1;
+      LoopQueue.push({reinitialize_mid});
+      return;
     } else {
       TI += iii;
       if (ISDYNAMICI) {
         dynamicupdatei();
       }
-      return 0;
+      LoopQueue.push({finishRun});
+      return;
     }
   }
 
-  return 0;
+  LoopQueue.push({finishRun});
+  return;
 }
 
 void reverse_I() {
@@ -709,7 +731,7 @@ void reverse_mid() {
   }
 }
 
-void reinitialize_inner() {
+void reinitialize_inner(std::any any) {
   if ((interorder == IJK) || (interorder == JIK)) {
     reverse_K();
   } else if ((interorder == IKJ) || (interorder == KIJ)) {
@@ -717,9 +739,10 @@ void reinitialize_inner() {
   } else if ((interorder == JKI) || (interorder == KJI)) {
     reverse_I();
   }
+  LoopQueue.push({inner_loop_before_calculate});
 }
 
-void reinitialize_mid() {
+void reinitialize_mid(std::any any) {
   if ((interorder == IKJ) || (interorder == JKI)) {
     reverse_K();
   } else if ((interorder == IJK) || (interorder == KJI)) {
@@ -727,6 +750,7 @@ void reinitialize_mid() {
   } else if ((interorder == JIK) || (interorder == KIJ)) {
     reverse_I();
   }
+  LoopQueue.push({reinitialize_inner});
 }
 
 void reinitialize_outer() {
@@ -2323,251 +2347,214 @@ Only in two place :
 1) The iterate mode (compact or chained) (but the format is same)
 2) The unbuffered (missed) access
 */
-void calculate() {
-
+void calculate(std::any any) {
   computePE = computeDramAccess = computeSramAccess = 0;
 
-  if ((dataflow == Inner) || (dataflow == Gust)) {
-
-    if (dataflow == Gust) {
-
-      prefetchNow = 0;
-
-      // all prefetch scheme
-      if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 66 ||
-          cacheScheme == 88 || cacheScheme == 11100 || cacheScheme == 11101) {
-        // reinitialize the next pointer for FLRU
-        if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 11100 ||
-            cacheScheme == 11101) {
-          for (int j1 = TJ; j1 < TJ + jjj; j1++) {
-            if (j1 > J)
-              break;
-            while (!nextposvector[j1].empty()) {
-              nextposvector[j1].pop();
-            }
-          }
-        }
-        // reinitialize the LFU tag for FLFU
-        if (cacheScheme == 66) {
-          for (int j1 = TJ; j1 < TJ + jjj; j1++) {
-            LFUtag[j1] = 0;
-          }
-        }
-
-        // first prefill the prefetch window
-        for (int ii = 0; prefetchNow < prefetchSize && ii < iii; ii++) {
-          if (TI + ii > I)
-            break;
-
-          prefetchRowNow = TI + ii;
-          // return 0 if can't prefetch that row now
-          if (!prefetchrow(TI + ii)) {
-            break;
-          }
-        }
-      }
-
-      for (int ii = 0; ii < iii; ii++) {
-        if (TI + ii > I)
-          break;
-
-        // get O(J) corresponding B (different from Gust and Inner)
-        // different from other dataflow (is A-dependent)
-        get_B_fibers(TI + ii);
-
-        // update the prefetch window after each row
-        // don't need to update prefetch window in static flru
-        if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 66 ||
-            cacheScheme == 88 || cacheScheme == 11100 || cacheScheme == 11101) {
-
-          // first minus this row's overhead
-          int needsize = 0;
-          if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 11101) {
-            needsize = currsizeA[TI + ii] * 4 + 1;
-          }
-          // FLFU mode; don't need next pointer (*3)
-          if (cacheScheme == 66 || cacheScheme == 88) {
-            needsize = currsizeA[TI + ii] * 3;
-          }
-
-          if (prefetchNow > needsize) {
-            prefetchNow -= needsize;
-          }
-
-          // need to prefetch the next ii+prefetchsize+1
-          if (prefetchNow >= prefetchSize)
-            continue;
-
-          while (prefetchRowNow < TI + iii) {
-            if (!prefetchrow(prefetchRowNow)) {
-              break;
-            }
-            prefetchRowNow++;
-          }
-        }
-
-        if (adaptive_prefetch) {
-          if (elements_processed_since_last_adjustment >= adjustment_interval) {
-            update_prefetch_size();
-            elements_processed_since_last_adjustment = 0;
-          }
-        }
-      }
-    }
-
-    if (dataflow == Inner) {
-
-      // update B here
-      for (int k = TK; k < TK + ((ISDYNAMICK) ? dynk : kkk); k++) {
-        get_B_fiber_col_iii(k, iii);
-      }
-
-      for (int ii = 0; ii < iii; ii++) {
-
-        int cnew = 0, cnow = 0;
-
-        // update A
-        // get A
-        get_A_fiber(TI + ii);
-
-        // update C
-
-        int tmpj = beginA[TI + ii];
-        int maxj = offsetarrayA[TI + ii + 1] - offsetarrayA[TI + ii];
-
-        // tmpc = 0
-        for (int k1 = TK; k1 < TK + ((ISDYNAMICK) ? dynk : kkk); k1++) {
-          tmpC[k1] = 0;
-        }
-
-        while (tmpj < maxj && A[TI + ii][tmpj] < TJ + jjj) {
-          // coordinate of required B fiber
-          int jj = A[TI + ii][tmpj];
-
-          update_c_fiber(jj);
-
-          tmpj++;
-
-          if (offsetarrayA[TI + ii] + tmpj >= offsetarrayA[TI + ii + 1]) {
-            break;
-          }
-        }
-
-        updateCAccess(TI + ii);
-
-        continue;
-
-        for (int kk = 0; kk < kkk; kk++) {
-          // get B
-          get_B_fiber_col(TK + kk);
-
-          // calculate if there is an intersect between A & B
-          int tmpja = beginA[TI + ii],
-              maxja = offsetarrayA[TI + ii + 1] - offsetarrayA[TI + ii];
-          int tmpjb = beginBc[TK + kk],
-              maxjb = offsetarrayBc[TK + kk + 1] - offsetarrayBc[TK + kk];
-
-          bool findflag = 0;
-
-          while (tmpja < maxja && A[TI + ii][tmpja] < TJ + jjj) {
-
-            int findj = A[TI + ii][tmpja];
-
-            while (tmpjb < maxjb && Bc[TK + kk][tmpjb] < TJ + jjj) {
-
-              if (Bc[TK + kk][tmpjb] >= findj) {
-                break;
-              }
-              tmpjb++;
-            }
-
-            // need to assure that b exit first!!
-            // find the same index!
-            if (tmpjb < maxjb && Bc[TK + kk][tmpjb] == findj) {
-              findflag = 1;
-              break;
-            }
-
-            tmpja++;
-          }
-
-          // get a C[TI+ii][TK+kk]
-          if (findflag) {
-            // if is the new index all update the old index
-            cnow++;
-
-          } else {
-            // zero C; don't need extra operation
-          }
-        }
-
-        computeDramAccess += memoryBandwidthPE(cnow * 3);
-        computeC += memoryBandwidthPE(cnow * 3);
-        AccessByte += cnow * 3;
-      }
-    }
+  if (dataflow == Gust) {
+    LoopQueue.push({calculateGust});
+    return;
   }
-  if ((dataflow == Outer)) {
 
-    for (int jj = 0; jj < jjj; jj++) {
-      get_A_fiber_col(TJ + jj);
+  if (dataflow == Inner) {
+    LoopQueue.push({calculateInner});
+    return;
+  }
 
-      // use a dumb jj
-      get_B_fiber(TJ + jj, jj);
+  if (dataflow == Outer) {
+    LoopQueue.push({calculateOuter});
+    return;
+  }
+
+  LoopQueue.push({finishCalculate});
+}
+
+void calculateGust(std::any any) {
+  prefetchNow = 0;
+
+  // all prefetch scheme
+  if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 66 ||
+      cacheScheme == 88 || cacheScheme == 11100 || cacheScheme == 11101) {
+    // reinitialize the next pointer for FLRU
+    if (cacheScheme == 6 || cacheScheme == 7 || cacheScheme == 11100 ||
+        cacheScheme == 11101) {
+      for (int j1 = TJ; j1 < TJ + jjj; j1++) {
+        if (j1 > J)
+          break;
+        while (!nextposvector[j1].empty()) {
+          nextposvector[j1].pop();
+        }
+      }
+    }
+    // reinitialize the LFU tag for FLFU
+    if (cacheScheme == 66) {
+      for (int j1 = TJ; j1 < TJ + jjj; j1++) {
+        LFUtag[j1] = 0;
+      }
     }
 
-    fulltagC = 0;
-    Csizenow = 0;
+    LoopQueue.push({prefetchPrefillWindowGust});
+    return;
+  }
 
-    for (int ii = TI; ii < TI + iii; ii++) {
-      int tmpj = beginA[ii];
-      int maxj = offsetarrayA[ii + 1] - offsetarrayA[ii];
+  LoopQueue.push({getBFibersGust, 0});
+}
 
-      // tmpc = 0
-      for (int k1 = TK; k1 < TK + kkk; k1++) {
-        tmpC[k1] = 0;
+void calculateInner(std::any any) {
+  // update B here
+  for (int k = TK; k < TK + ((ISDYNAMICK) ? dynk : kkk); k++) {
+    get_B_fiber_col_iii(k, iii);
+  }
+
+  for (int ii = 0; ii < iii; ii++) {
+
+    int cnew = 0, cnow = 0;
+
+    // update A
+    // get A
+    get_A_fiber(TI + ii);
+
+    // update C
+
+    int tmpj = beginA[TI + ii];
+    int maxj = offsetarrayA[TI + ii + 1] - offsetarrayA[TI + ii];
+
+    // tmpc = 0
+    for (int k1 = TK; k1 < TK + ((ISDYNAMICK) ? dynk : kkk); k1++) {
+      tmpC[k1] = 0;
+    }
+
+    while (tmpj < maxj && A[TI + ii][tmpj] < TJ + jjj) {
+      // coordinate of required B fiber
+      int jj = A[TI + ii][tmpj];
+
+      update_c_fiber(jj);
+
+      tmpj++;
+
+      if (offsetarrayA[TI + ii] + tmpj >= offsetarrayA[TI + ii + 1]) {
+        break;
       }
+    }
 
-      while (tmpj < maxj && A[ii][tmpj] < TJ + jjj) {
-        // coordinate of required B fiber
-        int jj = A[ii][tmpj];
+    updateCAccess(TI + ii);
 
-        computePE += currsizeB[jj];
+    continue;
 
-        update_c_fiber(jj);
+    for (int kk = 0; kk < kkk; kk++) {
+      // get B
+      get_B_fiber_col(TK + kk);
 
-        tmpj++;
+      // calculate if there is an intersect between A & B
+      int tmpja = beginA[TI + ii],
+          maxja = offsetarrayA[TI + ii + 1] - offsetarrayA[TI + ii];
+      int tmpjb = beginBc[TK + kk],
+          maxjb = offsetarrayBc[TK + kk + 1] - offsetarrayBc[TK + kk];
 
-        if (offsetarrayA[ii] + tmpj >= offsetarrayA[ii + 1]) {
+      bool findflag = 0;
+
+      while (tmpja < maxja && A[TI + ii][tmpja] < TJ + jjj) {
+
+        int findj = A[TI + ii][tmpja];
+
+        while (tmpjb < maxjb && Bc[TK + kk][tmpjb] < TJ + jjj) {
+
+          if (Bc[TK + kk][tmpjb] >= findj) {
+            break;
+          }
+          tmpjb++;
+        }
+
+        // need to assure that b exit first!!
+        // find the same index!
+        if (tmpjb < maxjb && Bc[TK + kk][tmpjb] == findj) {
+          findflag = 1;
           break;
         }
+
+        tmpja++;
       }
 
-      int cntc = 0;
-      for (int k1 = TK; k1 < TK + kkk; k1++) {
-        if (tmpC[k1]) {
-          cntc++;
-        }
-      }
+      // get a C[TI+ii][TK+kk]
+      if (findflag) {
+        // if is the new index all update the old index
+        cnow++;
 
-      if (!fulltagC) {
-        if (Csizenow + cntc * 3 >= Csize) {
-          fulltagC = 1;
-          Csizenow += cntc * 3;
-        } else {
-          Csizenow += cntc * 3;
-          // can be stored in sram!
-          computeSramAccess +=
-              sramReadBandwidth(cntc * 3 + 2) * (jjj / mergecnt);
-        }
       } else {
-        computeDramAccess += memoryBandwidthPE(cntc * 3 + 2) * (jjj / mergecnt);
-        computeC += memoryBandwidthPE(cntc * 3 + 2) * (jjj / mergecnt);
-        AccessByte += (cntc * 3 + 2) * (jjj / mergecnt);
+        // zero C; don't need extra operation
       }
+    }
+
+    computeDramAccess += memoryBandwidthPE(cnow * 3);
+    computeC += memoryBandwidthPE(cnow * 3);
+    AccessByte += cnow * 3;
+  }
+
+  LoopQueue.push({finishCalculate});
+}
+
+void calculateOuter(std::any any) {
+  for (int jj = 0; jj < jjj; jj++) {
+    get_A_fiber_col(TJ + jj);
+
+    // use a dumb jj
+    get_B_fiber(TJ + jj, jj);
+  }
+
+  fulltagC = 0;
+  Csizenow = 0;
+
+  for (int ii = TI; ii < TI + iii; ii++) {
+    int tmpj = beginA[ii];
+    int maxj = offsetarrayA[ii + 1] - offsetarrayA[ii];
+
+    // tmpc = 0
+    for (int k1 = TK; k1 < TK + kkk; k1++) {
+      tmpC[k1] = 0;
+    }
+
+    while (tmpj < maxj && A[ii][tmpj] < TJ + jjj) {
+      // coordinate of required B fiber
+      int jj = A[ii][tmpj];
+
+      computePE += currsizeB[jj];
+
+      update_c_fiber(jj);
+
+      tmpj++;
+
+      if (offsetarrayA[ii] + tmpj >= offsetarrayA[ii + 1]) {
+        break;
+      }
+    }
+
+    int cntc = 0;
+    for (int k1 = TK; k1 < TK + kkk; k1++) {
+      if (tmpC[k1]) {
+        cntc++;
+      }
+    }
+
+    if (!fulltagC) {
+      if (Csizenow + cntc * 3 >= Csize) {
+        fulltagC = 1;
+        Csizenow += cntc * 3;
+      } else {
+        Csizenow += cntc * 3;
+        // can be stored in sram!
+        computeSramAccess +=
+            sramReadBandwidth(cntc * 3 + 2) * (jjj / mergecnt);
+      }
+    } else {
+      computeDramAccess += memoryBandwidthPE(cntc * 3 + 2) * (jjj / mergecnt);
+      computeC += memoryBandwidthPE(cntc * 3 + 2) * (jjj / mergecnt);
+      AccessByte += (cntc * 3 + 2) * (jjj / mergecnt);
     }
   }
 
+  LoopQueue.push({finishCalculate});
+}
+
+void finishCalculate(std::any any) {
   totalCycle += max(computePE / PEcnt, max(computeDramAccess / PEcnt,
                                            computeSramAccess / sramBank));
   calCycle += max(computePE / PEcnt,
@@ -2576,6 +2563,62 @@ void calculate() {
   totalSram += computeSramAccess / sramBank;
   totalDram += computeDramAccess / PEcnt;
   totalPE += computePE / PEcnt;
+  LoopQueue.push({inner_loop_after_calculate});
+}
+
+void prefetchPrefillWindowGust(std::any any) {
+  // First prefill the prefetch window.
+  for (int ii = 0; prefetchNow < prefetchSize && ii < iii; ii++) {
+    if (TI + ii > I)
+      break;
+
+    prefetchRowNow = TI + ii;
+    if (!prefetchrow(TI + ii)) {
+      break;
+    }
+  }
+
+  LoopQueue.push({getBFibersGust, 0});
+}
+
+void getBFibersGust(std::any any) {
+  int ii = std::any_cast<int>(any);
+  if (ii >= iii || TI + ii > I) {
+    LoopQueue.push({finishCalculate});
+    return;
+  }
+
+  get_B_fibers(TI + ii);
+
+  int needsize = currsizeA[TI + ii] * 3;
+  if (prefetchNow > needsize) {
+    prefetchNow -= needsize;
+  }
+
+  if (prefetchNow >= prefetchSize) {
+    LoopQueue.push({getBFibersGust, ii + 1});
+  } else {
+    LoopQueue.push({prefetchNextRowGust, ii});
+  }
+}
+
+void prefetchNextRowGust(std::any any) {
+  int ii = std::any_cast<int>(any);
+  while (prefetchRowNow < TI + iii) {
+    if (!prefetchrow(prefetchRowNow)) {
+      break;
+    }
+    prefetchRowNow++;
+  }
+
+  if (adaptive_prefetch) {
+    if (elements_processed_since_last_adjustment >= adjustment_interval) {
+      update_prefetch_size();
+      elements_processed_since_last_adjustment = 0;
+    }
+  }
+
+  LoopQueue.push({getBFibersGust, ii + 1});
 }
 
 void post_calculate_store() {
@@ -2733,7 +2776,23 @@ void postTileMerge() {
   postCycle += max(postDramAccess, postSramAccess);
 }
 
+// run now simply iterates though the loop until it is empty.
+// It is the job of the loop elements to add new items to the queue as the simulator runs.
+// Currently, the loop elements update a global time themselves.
+// This should be changed so each element does not directly update global time but tags
+// itself with how long it will take to run (service time).
+// Then, in this run loop we will update the global clock based on how long it takes each elemnt to run
+// and in what order they run.
 void run() {
+  LoopQueue.push({initialize});
+  while (!LoopQueue.empty()) {
+    QueueEntry entry = LoopQueue.front();
+    LoopQueue.pop();
+    entry.queueFunc(entry.args);
+  }
+}
+
+void initialize(std::any any) {
   reinitialize();
 
   if (adaptive_prefetch) {
@@ -2755,54 +2814,47 @@ void run() {
 
   // reinitialize**: TI/TJ/TK to 0;  put beginA/B to 0
   reinitialize_outer();
-  do {
 
-    reinitialize_mid();
+  LoopQueue.push({reinitialize_mid});
+}
 
-    do {
+void inner_loop_before_calculate(std::any any) {
+  initialDynamicTile();
 
-      reinitialize_inner();
-      do {
+  // need to initialize the cache each time change the tile
+  if (ISCACHE) {
+    initializeCacheValid();
+  }
 
-        initialDynamicTile();
+  // force for just test
+  //  ensure the begin is right (with TI,TJ,TK)
+  // forcebeginA();
+  // forcebeginB();
 
-        // need to initialize the cache each time change the tile
-        if (ISCACHE) {
-          initializeCacheValid();
-        }
+  pre_calculate_load();
 
-        // force for just test
-        //  ensure the begin is right (with TI,TJ,TK)
-        // forcebeginA();
-        // forcebeginB();
+  updateBlockA();
+  updateBlockB();
+  LoopQueue.push({calculate});
+}
 
-        pre_calculate_load();
+void inner_loop_after_calculate(std::any any) {
+  post_calculate_store();
 
-        updateBlockA();
-        updateBlockB();
+  // adddyn
+  // dynamically update the estimate tile here.
+  // don't change the actual TI/TJ/TK(iii, jjj, kkk in the code) here,
+  // only change the _TI/_TJ/_TK(_iii, _jjj, _kkk in the code) here update
+  // the _TI/_TJ/_TK to TI/TJ/TK when actually updating TI/TJ/TK (decide
+  // by the interorder) this means will change immediately when the update
+  // dimension is the inner-most dimension. here we use Tcnt00, Tcnt01,
+  // Tcnt10, Tcnt11 to udpate _TI/_TJ/_TK
 
-        calculate();
+  update_T();
+  LoopQueue.push({iterate_inner_loop});
+}
 
-        post_calculate_store();
-
-        // adddyn
-        // dynamically update the estimate tile here.
-        // don't change the actual TI/TJ/TK(iii, jjj, kkk in the code) here,
-        // only change the _TI/_TJ/_TK(_iii, _jjj, _kkk in the code) here update
-        // the _TI/_TJ/_TK to TI/TJ/TK when actually updating TI/TJ/TK (decide
-        // by the interorder) this means will change immediately when the update
-        // dimension is the inner-most dimension. here we use Tcnt00, Tcnt01,
-        // Tcnt10, Tcnt11 to udpate _TI/_TJ/_TK
-
-        update_T();
-
-      } // update TI/TJ/TK; update beginA/B/C if TI/J/K don't overflow
-      while (iterate_inner_loop());
-
-    } while (iterate_mid_loop());
-
-  } while (iterate_outer_loop());
-
+void finishRun(std::any any) {
   postTileMerge();
 
   analyze_statistics();

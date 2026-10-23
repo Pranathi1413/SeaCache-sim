@@ -1823,7 +1823,8 @@ void updateCAccess(int ii) {
         sramReadBandwidth(cntc * 3) + sramWriteBandwidth(cntc * 3);
   }
 }
-
+// Hari: ii is literally which PE is doing the work, but the code throws that away the instant it adds to the shared total.
+// This is exactly where per-PE tracking needs to start.
 void get_B_fibers(int ii) {
   if (dataflow == Gust) {
     int tmpj = beginA[ii];
@@ -2326,9 +2327,7 @@ Only in two place :
 void calculate() {
 
   computePE = computeDramAccess = computeSramAccess = 0;
-  // Hari: these 3 counters add up work for the ENTIRE tile, every PE, every fiber, all lumped together
-  // only get split by PEcnt/sramBank once, right at the end (around line 2571)
-  // so there's no real per-PE timing anywhere here, just one number for the whole tile
+  // Hari: This is the top-level confirmation that the simulator treats a whole tile’s work as one aggregate blob. 
   
   if ((dataflow == Inner) || (dataflow == Gust)) {
 

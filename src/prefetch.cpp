@@ -47,9 +47,13 @@ void fiberAReady(std::any any) {
     FiberArgs args = std::any_cast<FiberArgs>(any);
     RowInfo info = startRowGust(args.row);
     stallA += simTime - args.requestInitTime;
+
+    // Shared fiberCount for all B fibers on given A row
+    int* fiberCount = new(int);
+    *fiberCount = info.fibers.size();
     for (int fiber : info.fibers) {
         bFetchCount++;
-        schedule(requestFiber, FiberArgs{args.row, fiber, info.cDramWords, simTime});
+        schedule(requestFiber, FiberArgs{args.row, fiber, info.cDramWords, simTime, fiberCount});
     }
     aFetchCount--;
     // Update prefetch window size now that A is being used

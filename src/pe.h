@@ -15,7 +15,7 @@ void slidePrefetchWindowGust(int ii);
 
 // one B fiber a PE asks for
 struct FiberArgs {
-  int row, fiber; double cDramWords; long long requestInitTime;
+  int row, fiber; double cDramWords; long long requestInitTime; int* completedFiberCount;
 };
 struct PEArgs {
   FiberArgs fiberArgs; int pe;

@@ -8,6 +8,7 @@
 #include <deque>
 
 struct PE {
+  int row;
   bool multiplying;
   long long waitStart;     // when it started waiting, for the stall stats
 };
@@ -66,9 +67,13 @@ void peRowDone(std::any any) {
   double cDramWords = args.fiberArgs.cDramWords;
   PE &p = pes[pe];
   bool endOfTile = TI + currentII >= I;
-  if (cDramWords > 0) {
+
+  // all B fibers share a completed fiber Count. Once it is 0 that means all fibers for a row are completed.
+  *args.fiberArgs.completedFiberCount -= 1;
+  if (cDramWords > 0 && !(args.fiberArgs.completedFiberCount)) {
     cFiberCount++;
     schedule(sendToDRAM, DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
+    delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak
   }
 
   p.waitStart = simTime;

@@ -37,6 +37,7 @@ void peTakeRow(std::any any) {
 
   if (readyFibers.empty()) {
     pes[pe].multiplying = false;
+    peStartWaiting(pe); // Hari: bookkeeping, PE idle, nothing ready
     return;
   }
 
@@ -50,7 +51,11 @@ void peFiberReady(std::any any) {
   int pe = args.pe;
   int fiber = args.fiberArgs.fiber;
 
-  if (!pes[pe].multiplying) peIdle[pe] += simTime - pes[pe].waitStart;
+  // Hari: bookkeeping, resolve wait if PE was idle
+  if (!pes[pe].multiplying) {
+    peStopWaiting(pe);
+    peIdle[pe] += simTime - pes[pe].waitStart;
+  }
 
   pes[pe].waitStart = simTime;
   pes[pe].multiplying = true;
@@ -80,6 +85,7 @@ void peRowDone(std::any any) {
   // If at end of tile and no new fibers then go idle and posssibly stop calculation
   if (readyFibers.empty() && !aFetchCount && !bFetchCount) {
     p.multiplying = false;
+    peStartWaiting(pe); // Hari: bookkeeping, this specific PE just went idle
     bool anyMultiplying = false;
     for (int i = 0; i < PEcnt; i++) {
       peIdle[i] += simTime - pes[i].waitStart;

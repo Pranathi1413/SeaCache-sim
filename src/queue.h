@@ -30,6 +30,10 @@ extern long long simTime;
 // add an event that happens 'delay' cycles from now (0 = at the current cycle)
 void schedule(void (*func)(std::any), std::any args = {}, long long delay = 0);
 
+// Hari: bookkeeping only, see queue.cpp. No effect on scheduling or output.
+void peStartWaiting(int pe);
+void peStopWaiting(int pe);
+
 /*
 
 The LoopQueue and QueueEntry is how queues will be defined. Each entry will have the necessary information to be executed
@@ -114,6 +118,11 @@ struct OpsWaitingOnMemoryQueueEntry : BaseQueueEntry {
 };
 
 struct OpsWaitingOnPEsQueueEntry : BaseQueueEntry {
+    // Hari: bookkeeping only. Tracks which PE is currently waiting, and since when.
+    // Populated/removed alongside the real wait logic in pe.cpp; does not drive
+    // any scheduling decisions, purely for queue-depth/occupancy visibility.
+    int pe;
+    long long waitStart;
 };
 
 struct WritebackQueueEntry : BaseQueueEntry { 

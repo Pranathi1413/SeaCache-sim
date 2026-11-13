@@ -71,6 +71,7 @@ void peTakeRow(std::any any) {
   p.waitStart = simTime;
 
   // read the A row: from DRAM if it's not on chip
+  peStartWaiting(pe); // Hari: bookkeeping, PE starts waiting on A
   if (info.aDramWords > 0) {
     schedule(sendToDRAM, DRAMRequest{A_ROW, p.row, pe, info.aDramWords});
   } else {
@@ -82,6 +83,7 @@ void peTakeRow(std::any any) {
 void peAReady(std::any any) {
   int pe = std::any_cast<int>(any);
   PE &p = pes[pe];
+  peStopWaiting(pe); // Hari: bookkeeping, A wait resolved
   peStallA[pe] += simTime - p.waitStart;
   p.waitStart = simTime;
 
@@ -89,6 +91,7 @@ void peAReady(std::any any) {
     schedule(peRowDone, pe);
     return;
   }
+  peStartWaiting(pe); // Hari: bookkeeping, PE starts waiting on B fibers
   for (int fiber : p.fibers) {
     schedule(requestFiber, FiberArgs{pe, p.row, fiber});
   }
@@ -104,12 +107,19 @@ void peFiberReady(std::any any) {
 void peMultiplyNext(std::any any) {
   int pe = std::any_cast<int>(any);
   PE &p = pes[pe];
-  if (p.multiplying || p.arrived.empty()) {
+  if (p.multiplying) {
+    return;
+  }
+  if (p.arrived.empty()) {
+    // Hari: bookkeeping, PE has nothing left to multiply right now,
+    // starts a new wait episode for the next B fiber to arrive.
+    peStartWaiting(pe);
     return;
   }
   int fiber = p.arrived.front();
   p.arrived.pop_front();
 
+  peStopWaiting(pe); // Hari: bookkeeping, B wait resolved (if it was waiting)
   peStallB[pe] += simTime - p.waitStart;
   peBusy[pe] += currsizeB[fiber];
   perPEWork[pe] += currsizeB[fiber];

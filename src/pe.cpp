@@ -31,19 +31,41 @@ bool peReady(int pe) {
   return !pes[pe].multiplying;
 }
 
+void wakeAllIdlePes() {
+  for(int i = 0; i < PEcnt; ++i) {
+    if (!pes[i].multiplying) peTakeRow(i);
+  }
+}
+
 // check if any fibers are waiting in queue. If not, go idle
 void peTakeRow(std::any any) {
   int pe = std::any_cast<int>(any);
+  if (pes[pe].multiplying) return;
 
-  if (readyFibers.empty()) {
+  if (readyFibers.empty() && (fibersWaitingToStart.empty() || (maxConcurrentMultiply <= conccurrentMultiplyCount))) {
     pes[pe].multiplying = false;
     peStartWaiting(pe); // Hari: bookkeeping, PE idle, nothing ready
     attemptFinish(-1);
     return;
   }
 
-  peFiberReady(PEArgs{readyFibers.front(), pe});
-  readyFibers.pop();
+  FiberArgs args;
+  if (!readyFibers.empty()) {
+    args = readyFibers.front(); readyFibers.pop();
+    peFiberReady(PEArgs{args, pe});
+  } else {
+    auto beginIter = fibersWaitingToStart.begin();
+    auto waitingFibers = beginIter->second;
+    if (!waitingFibers.size()) throw std::runtime_error("Invalid waiting fibers size");
+    args = waitingFibers[0]; 
+    *args.hasIncrementedConcurrentCount = true;
+    conccurrentMultiplyCount++;
+    for(int i = 1; i < waitingFibers.size(); ++i) readyFibers.push(waitingFibers[i]);
+    fibersWaitingToStart.erase(beginIter);
+
+    peFiberReady(PEArgs{args, pe});
+    wakeAllIdlePes();
+  }
 }
 
 // Start processing ready fiber
@@ -68,7 +90,7 @@ void peFiberReady(std::any any) {
 }
 
 bool isTileDone() {
-  return readyFibers.empty() && !aFetchCount && !bFetchCount && (currentII >= iii || TI + currentII > I);
+  return readyFibers.empty() && fibersWaitingToStart.empty() && !aFetchCount && !bFetchCount && (currentII >= iii || TI + currentII > I);
 }
 
 // check if need to finish tile calculation
@@ -107,8 +129,10 @@ void peRowDone(std::any any) {
     if (canSendToDRAM(args.fiberArgs.row) || cDramWords == 0) {
       schedule(prefetchA);
       if (cDramWords > 0) sendToDRAM(DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
+      if (*args.fiberArgs.hasIncrementedConcurrentCount) conccurrentMultiplyCount--;
       prefetchNow -= currsizeA[args.fiberArgs.row] * 3;
       delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak
+      delete(args.fiberArgs.hasIncrementedConcurrentCount);
     }
     else {
       schedule(peRowDone, args, 10);
@@ -116,6 +140,7 @@ void peRowDone(std::any any) {
     }
   }
 
+  p.multiplying = false;
   p.waitStart = simTime;
   // If at end of tile and no new fibers then go idle and posssibly stop calculation
   if (isTileDone()) {

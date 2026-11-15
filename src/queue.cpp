@@ -20,6 +20,10 @@ std::vector<OpsWaitingOnPEsQueueEntry> OpsWaitingOnPEsQueue;
 // Hari: bookkeeping helpers for OpsWaitingOnPEsQueue, pure visibility,
 // no effect on scheduling or output. Call when a PE starts/stops waiting.
 void peStartWaiting(int pe) {
+  for (const auto &entry : OpsWaitingOnPEsQueue) {
+    if (entry.pe == pe) return;
+  }
+
   OpsWaitingOnPEsQueueEntry e;
   e.pe = pe;
   e.waitStart = simTime;

@@ -12,13 +12,14 @@ struct RowInfo {
   int fetchedFiberIndex = 0;
   int row;
   int* completedFiberCount;
+  bool* hasIncrementedConcurrentCount;
 };
 RowInfo startRowGust(int row);
 void slidePrefetchWindowGust(int ii);
 
 // one B fiber a PE asks for
 struct FiberArgs {
-  int row, fiber; double cDramWords; long long requestInitTime; int* completedFiberCount;
+  int row, fiber; double cDramWords; long long requestInitTime; int* completedFiberCount; bool* hasIncrementedConcurrentCount;
 };
 struct PEArgs {
   FiberArgs fiberArgs; int pe; bool hasFinished;
@@ -26,6 +27,7 @@ struct PEArgs {
 
 void initPEs();
 bool peReady(int pe);
+void wakeAllIdlePes();
 
 extern long long stallA, stallB, stallC;
 

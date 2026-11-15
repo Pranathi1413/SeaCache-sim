@@ -5,7 +5,13 @@
 #include <stdexcept>
 
 std::queue<FiberArgs> readyFibers;
+// Holds fibers waiting for reduction in max concurrent multiply.
+// The concurrent multiply is meant to simulate a limited number of writeback registers being available.
+// One A fiber has to have one writeback register so the intermediate results of C can be stored somewhere.
+std::unordered_map<int, std::vector<FiberArgs>> fibersWaitingToStart;
 int currentII = 0;
+int conccurrentMultiplyCount = 0;
+int maxConcurrentMultiply = 32;
 long long aFetchCount = 0;
 long long bFetchCount = 0;
 
@@ -51,7 +57,7 @@ void getBFibers(std::any any) {
         int fiber = info.fibers[info.fetchedFiberIndex];
         if (canSendToDRAM(fiber)) {
             bFetchCount++;
-            requestFiber(FiberArgs{info.row, fiber, info.cDramWords, simTime, info.completedFiberCount});
+            requestFiber(FiberArgs{info.row, fiber, info.cDramWords, simTime, info.completedFiberCount, info.hasIncrementedConcurrentCount});
         }
         else break;
     }
@@ -75,6 +81,9 @@ void fiberAReady(std::any any) {
     int* fiberCount = new(int);
     *fiberCount = info.fibers.size();
     info.completedFiberCount = fiberCount;
+    bool* hasIncremented = new(bool);
+    *hasIncremented = false;
+    info.hasIncrementedConcurrentCount = hasIncremented;
     stallA += simTime - args.requestInitTime;
 
     getBFibers(info);
@@ -87,15 +96,28 @@ void fiberBReady(std::any any) {
     bool found = false;
     for (int pe = 0; pe < PEcnt; pe++) {
         // Find PE ready to execute multiply
-        if (peReady(pe)) {
+        if (peReady(pe) && (maxConcurrentMultiply > conccurrentMultiplyCount || *args.hasIncrementedConcurrentCount)) {
+            if (!*args.hasIncrementedConcurrentCount) {
+                conccurrentMultiplyCount++;
+                *args.hasIncrementedConcurrentCount = true;
+            }
             peFiberReady(PEArgs{args, pe});
+            // If fibers were wating, add to readyFibers then wake PEs
+            if (fibersWaitingToStart.find(args.row) != fibersWaitingToStart.end()) {
+                for(auto args: fibersWaitingToStart[args.row]) readyFibers.push(args);
+                fibersWaitingToStart.erase(args.row);
+                wakeAllIdlePes();
+            }
             found = true;
             break;
         }
     }
     bFetchCount--;
     // If no pe found put in queue of waiting pes
-    if (!found) readyFibers.push(args);
+    if (!found) {
+        if (*args.hasIncrementedConcurrentCount) readyFibers.push(args);
+        else fibersWaitingToStart[args.row].push_back(args);
+    }
 }
 
 void fiberCDone(std::any any) {

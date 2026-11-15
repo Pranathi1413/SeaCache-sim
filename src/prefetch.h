@@ -7,7 +7,9 @@
 
 extern int currentII;
 extern long long aFetchCount, bFetchCount;
+extern int conccurrentMultiplyCount, maxConcurrentMultiply;
 extern std::queue<FiberArgs> readyFibers;
+extern std::unordered_map<int, std::vector<FiberArgs>> fibersWaitingToStart;
 
 void initPrefetch();
 

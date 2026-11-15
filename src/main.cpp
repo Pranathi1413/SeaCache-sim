@@ -40,6 +40,7 @@ int main(int argc, char *argv[]) {
   sramBank = tmpbank;
   // event timing settings, defaults are used if they're not in the config file
   dramChannels = config.value("dramChannels", 4);
+  maxDramChannelSize = config.value("maxDramChannelSize", 100);
   dramLatency = config.value("dramLatency", 100);
   ISCACHE = 1;
   int baselinetest = config["baselinetest"].get<int>();

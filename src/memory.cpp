@@ -10,8 +10,10 @@
 #include <deque>
 #include <unordered_map>
 #include <vector>
+#include <stdexcept>
 
 int dramChannels = 4;
+int maxDramChannelSize = 100; // limit max dram channel size
 long long dramLatency = 100; // our guess, not from the paper
 
 // one queue per channel
@@ -36,9 +38,15 @@ void initMemory() {
   hits = misses = merged = 0;
 }
 
+bool canSendToDRAM(int id) {
+  int ch = id % dramChannels;
+  return dramQueue[ch].size() < maxDramChannelSize;
+}
+
 void sendToDRAM(std::any any) {
   DRAMRequest req = std::any_cast<DRAMRequest>(any);
   int ch = req.id % dramChannels;
+  if (dramQueue[ch].size() >= maxDramChannelSize) throw std::runtime_error("DRAM channel capacity exceeded");
   dramQueue[ch].push_back(req);
   schedule(channelServe, ch);
 }
@@ -96,7 +104,7 @@ void requestFiber(std::any any) {
   } else if (access.dramWords > 0) {
     waitingForFiber[args.fiber] = {args};
     misses++;
-    schedule(sendToDRAM, DRAMRequest{B_FIBER, args.fiber, access.dramWords});
+    sendToDRAM(DRAMRequest{B_FIBER, args.fiber, access.dramWords});
   } else {
     hits++;
     schedule(fiberBReady, args, access.sramCycles);

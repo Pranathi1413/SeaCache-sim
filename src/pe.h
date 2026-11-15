@@ -9,6 +9,9 @@ struct RowInfo {
   std::vector<int> fibers; // B rows it needs
   double aDramWords, cDramWords;
   long long aSramCycles;
+  int fetchedFiberIndex = 0;
+  int row;
+  int* completedFiberCount;
 };
 RowInfo startRowGust(int row);
 void slidePrefetchWindowGust(int ii);
@@ -18,7 +21,7 @@ struct FiberArgs {
   int row, fiber; double cDramWords; long long requestInitTime; int* completedFiberCount;
 };
 struct PEArgs {
-  FiberArgs fiberArgs; int pe;
+  FiberArgs fiberArgs; int pe; bool hasFinished;
 };
 
 void initPEs();
@@ -30,6 +33,7 @@ extern long long stallA, stallB, stallC;
 void peTakeRow(std::any any);
 void peFiberReady(std::any any);
 void peRowDone(std::any any);
+void attemptFinish(std::any any);
 
 void printPEStats(long long totalCycles);
 

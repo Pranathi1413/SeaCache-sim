@@ -6,7 +6,6 @@
 #include "pe.h"
 
 extern int currentII;
-extern int cFiberCount;
 extern long long aFetchCount, bFetchCount;
 extern std::queue<FiberArgs> readyFibers;
 

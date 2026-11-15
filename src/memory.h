@@ -3,7 +3,7 @@
 
 #include <any>
 
-extern int dramChannels;
+extern int dramChannels, maxDramChannelSize;
 extern long long dramLatency;
 
 enum RequestType { A_ROW, B_FIBER, C_ROW };
@@ -21,6 +21,7 @@ void initMemory();
 // events the PEs schedule
 void sendToDRAM(std::any any);   // a DRAMRequest
 void requestFiber(std::any any); // a FiberArgs (pe.h)
+bool canSendToDRAM(int id);
 
 // what the cache says about one fiber (in simulator.cpp)
 struct FiberAccess {

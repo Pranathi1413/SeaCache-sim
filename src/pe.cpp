@@ -38,6 +38,7 @@ void peTakeRow(std::any any) {
   if (readyFibers.empty()) {
     pes[pe].multiplying = false;
     peStartWaiting(pe); // Hari: bookkeeping, PE idle, nothing ready
+    attemptFinish(-1);
     return;
   }
 
@@ -50,6 +51,7 @@ void peFiberReady(std::any any) {
   PEArgs args = std::any_cast<PEArgs>(any);
   int pe = args.pe;
   int fiber = args.fiberArgs.fiber;
+  args.hasFinished = false;
 
   // Hari: bookkeeping, resolve wait if PE was idle
   if (!pes[pe].multiplying) {
@@ -65,6 +67,29 @@ void peFiberReady(std::any any) {
   schedule(peRowDone, args, currsizeB[fiber]); // 1 multiply per cycle
 }
 
+bool isTileDone() {
+  return readyFibers.empty() && !aFetchCount && !bFetchCount && (currentII >= iii || TI + currentII > I);
+}
+
+// check if need to finish tile calculation
+void attemptFinish(std::any any) {
+  if (isTileDone()) {
+    int pe = std::any_cast<int>(any);
+    if (pe >= 0) {
+      PE &p = pes[pe];
+      p.multiplying = false;
+      peStartWaiting(pe); // Hari: bookkeeping, this specific PE just went idle
+    }
+    bool anyMultiplying = false;
+    for (int i = 0; i < PEcnt; i++) {
+      peIdle[i] += simTime - pes[i].waitStart;
+      pes[i].waitStart = simTime;
+      anyMultiplying |= pes[i].multiplying;
+    }
+    if (!anyMultiplying) schedule(finishCalculate);
+  }
+}
+
 // C goes to DRAM, the PE doesn't wait for it and takes the next row
 void peRowDone(std::any any) {
   PEArgs args = std::any_cast<PEArgs>(any);
@@ -73,31 +98,32 @@ void peRowDone(std::any any) {
   PE &p = pes[pe];
   bool endOfTile = TI + currentII >= I;
 
+  // Since peRowDown can be called multiple times need to make sure count is only decremented once
+  if (!args.hasFinished) *args.fiberArgs.completedFiberCount -= 1;
+  args.hasFinished = true;
+
   // all B fibers share a completed fiber Count. Once it is 0 that means all fibers for a row are completed.
-  *args.fiberArgs.completedFiberCount -= 1;
-  if (cDramWords > 0 && !(*args.fiberArgs.completedFiberCount)) {
-    cFiberCount++;
-    schedule(sendToDRAM, DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
-    delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak
+  if (*args.fiberArgs.completedFiberCount <= 0) {
+    if (canSendToDRAM(args.fiberArgs.row) || cDramWords == 0) {
+      schedule(prefetchA);
+      if (cDramWords > 0) sendToDRAM(DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
+      prefetchNow -= currsizeA[args.fiberArgs.row] * 3;
+      delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak
+    }
+    else {
+      schedule(peRowDone, args, 10);
+      return;
+    }
   }
 
   p.waitStart = simTime;
   // If at end of tile and no new fibers then go idle and posssibly stop calculation
-  if (readyFibers.empty() && !aFetchCount && !bFetchCount) {
-    p.multiplying = false;
-    peStartWaiting(pe); // Hari: bookkeeping, this specific PE just went idle
-    bool anyMultiplying = false;
-    for (int i = 0; i < PEcnt; i++) {
-      peIdle[i] += simTime - pes[i].waitStart;
-      pes[i].waitStart = simTime;
-      anyMultiplying |= pes[i].multiplying;
-    }
-    if (!anyMultiplying) schedule(finishCalculate);
-    return;
+  if (isTileDone()) {
+    attemptFinish(pe);
+  } else {
+    // Try to get new row
+    schedule(peTakeRow, pe);
   }
-
-  // Try to get new row
-  schedule(peTakeRow, pe);
 }
 
 void printPEStats(long long totalCycles) {

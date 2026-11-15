@@ -2869,6 +2869,11 @@ void inner_loop_after_calculate(std::any any) {
 }
 
 void finishRun(std::any any) {
+  if(!LoopQueue.empty()) {
+    schedule(finishRun, NULL, 10); // wait 10 cycles before next attempt
+    return;
+  }
+
   long long mergeBefore = postCycle;
   postTileMerge();
 

@@ -75,7 +75,7 @@ void peRowDone(std::any any) {
 
   // all B fibers share a completed fiber Count. Once it is 0 that means all fibers for a row are completed.
   *args.fiberArgs.completedFiberCount -= 1;
-  if (cDramWords > 0 && !(args.fiberArgs.completedFiberCount)) {
+  if (cDramWords > 0 && !(*args.fiberArgs.completedFiberCount)) {
     cFiberCount++;
     schedule(sendToDRAM, DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
     delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak

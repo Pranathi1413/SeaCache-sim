@@ -135,7 +135,7 @@ void peRowDone(std::any any) {
       delete(args.fiberArgs.hasIncrementedConcurrentCount);
     }
     else {
-      schedule(peRowDone, args, 10);
+      schedule(peRowDone, args, blockedDRAMRequestWaitTime);
       return;
     }
   }

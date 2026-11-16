@@ -3,6 +3,7 @@
 
 #include <any>
 #include <vector>
+#include "memory.h"
 
 // what one row of A needs (in simulator.cpp)
 struct RowInfo {
@@ -19,7 +20,12 @@ void slidePrefetchWindowGust(int ii);
 
 // one B fiber a PE asks for
 struct FiberArgs {
-  int row, fiber; double cDramWords; long long requestInitTime; int* completedFiberCount; bool* hasIncrementedConcurrentCount;
+  int row, fiber; double cDramWords; 
+  long long requestInitTime; 
+  int* completedFiberCount; 
+  bool* hasIncrementedConcurrentCount; 
+  FiberAccess access;
+  bool isInitialFiberRequest;
 };
 struct PEArgs {
   FiberArgs fiberArgs; int pe; bool hasFinished;

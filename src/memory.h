@@ -5,6 +5,7 @@
 
 extern int dramChannels, maxDramChannelSize;
 extern long long dramLatency;
+extern int blockedDRAMRequestWaitTime;
 
 enum RequestType { A_ROW, B_FIBER, C_ROW };
 

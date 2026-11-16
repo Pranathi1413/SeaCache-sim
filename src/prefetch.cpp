@@ -48,22 +48,18 @@ void prefetchA(std::any any) {
     
     // Confirm there was space before prefetching again
     if (prefetchCount) schedule(prefetchA, NULL, prefetchCount); // prefetchCount cycles to prefetch prefetchCount As
-    if (wasBlocked) schedule(prefetchA, NULL, 10);
+    if (wasBlocked) schedule(prefetchA, NULL, blockedDRAMRequestWaitTime);
 }
 
 void getBFibers(std::any any) {
     RowInfo info = std::any_cast<RowInfo>(any);
     for(;info.fetchedFiberIndex < info.fibers.size(); info.fetchedFiberIndex++) {
         int fiber = info.fibers[info.fetchedFiberIndex];
-        if (canSendToDRAM(fiber)) {
-            bFetchCount++;
-            requestFiber(FiberArgs{info.row, fiber, info.cDramWords, simTime, info.completedFiberCount, info.hasIncrementedConcurrentCount});
-        }
-        else break;
+        bFetchCount++;
+        requestFiber(FiberArgs{info.row, fiber, info.cDramWords, simTime, info.completedFiberCount, info.hasIncrementedConcurrentCount});
     }
 
-    if (info.fetchedFiberIndex < info.fibers.size()) schedule(getBFibers, info, 10);
-    else aFetchCount--;
+    aFetchCount--;
 }
 
 // dram returned A fiber so now bet B fibers for A

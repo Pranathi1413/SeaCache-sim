@@ -15,6 +15,7 @@
 int dramChannels = 4;
 int maxDramChannelSize = 100; // limit max dram channel size
 long long dramLatency = 100; // our guess, not from the paper
+int blockedDRAMRequestWaitTime = 10; // wait time when dram request failes
 
 // one queue per channel
 std::vector<std::deque<DRAMRequest>> dramQueue;
@@ -91,24 +92,44 @@ void dramArrive(std::any any) {
   }
 }
 
+void requestFiberFromDRAM(std::any any) {
+  FiberArgs args = std::any_cast<FiberArgs>(any);
+  auto access = args.access;
+
+  if (args.isInitialFiberRequest && waitingForFiber.count(args.fiber)) {
+    // already on its way from DRAM, wait for that one
+    waitingForFiber[args.fiber].push_back(args);
+    merged++;
+    return;
+  } 
+
+  if (access.dramWords == 0) {
+    hits++;
+    schedule(fiberBReady, args, access.sramCycles);
+    return;
+  }
+
+  // Only update waiting on initial request
+  if (args.isInitialFiberRequest) {
+    waitingForFiber[args.fiber] = {args};
+    args.isInitialFiberRequest = false;
+  }
+  
+  if (canSendToDRAM(args.fiber)) {
+    misses++;
+    sendToDRAM(DRAMRequest{B_FIBER, args.fiber, access.dramWords});
+  } else schedule(requestFiberFromDRAM, args, blockedDRAMRequestWaitTime);
+}
+
 void requestFiber(std::any any) {
   FiberArgs args = std::any_cast<FiberArgs>(any);
 
   // the cache decides hit/miss now, when the PE asks for it
   FiberAccess access = accessFiberGust(args.fiber, args.row);
+  args.access = access;
+  args.isInitialFiberRequest = true;
 
-  if (waitingForFiber.count(args.fiber)) {
-    // already on its way from DRAM, wait for that one
-    waitingForFiber[args.fiber].push_back(args);
-    merged++;
-  } else if (access.dramWords > 0) {
-    waitingForFiber[args.fiber] = {args};
-    misses++;
-    sendToDRAM(DRAMRequest{B_FIBER, args.fiber, access.dramWords});
-  } else {
-    hits++;
-    schedule(fiberBReady, args, access.sramCycles);
-  }
+  requestFiberFromDRAM(args);
 }
 
 void printMemoryStats(long long totalCycles) {

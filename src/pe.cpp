@@ -1,5 +1,6 @@
 #include "pe.h"
 #include "headers.h"
+#include "cache.h"
 #include "memory.h"
 #include "prefetch.h"
 #include "queue.h"
@@ -17,6 +18,15 @@ std::vector<PE> pes;
 std::vector<long long> peBusy, peStallA, peStallB, peIdle, peDoneAt;
 
 long long stallA = 0, stallB = 0, stallC = 0;
+// how many A rows / B fibers / C rows the stalls above add up, to print averages
+long long stallACount = 0, stallBCount = 0, stallCCount = 0;
+
+// pran: set once the tile's finishCalculate is scheduled. attemptFinish can be reached from several
+// events in the same cycle, and a second finishCalculate would run the next tiles twice
+bool tileFinishing = false;
+
+// how many times the adaptive prefetch size was updated
+long long prefetchAdjustments = 0;
 
 void initPEs() {
   pes.assign(PEcnt, PE());
@@ -25,6 +35,9 @@ void initPEs() {
   peStallB.assign(PEcnt, 0);
   peIdle.assign(PEcnt, 0);
   peDoneAt.assign(PEcnt, 0);
+  stallA = stallB = stallC = 0;
+  stallACount = stallBCount = stallCCount = 0;
+  prefetchAdjustments = 0;
 }
 
 bool peReady(int pe) {
@@ -33,7 +46,9 @@ bool peReady(int pe) {
 
 void wakeAllIdlePes() {
   for(int i = 0; i < PEcnt; ++i) {
-    if (!pes[i].multiplying) peTakeRow(i);
+    // pran: scheduled, not called directly. peTakeRow can call wakeAllIdlePes again, so direct calls
+    // nested inside each other. peTakeRow skips PEs that got a fiber in the meantime
+    if (!pes[i].multiplying) schedule(peTakeRow, i);
   }
 }
 
@@ -104,11 +119,17 @@ void attemptFinish(std::any any) {
     }
     bool anyMultiplying = false;
     for (int i = 0; i < PEcnt; i++) {
-      peIdle[i] += simTime - pes[i].waitStart;
-      pes[i].waitStart = simTime;
+      // pran: only idle PEs. a PE that's still multiplying was busy since its waitStart, not idle
+      if (!pes[i].multiplying) {
+        peIdle[i] += simTime - pes[i].waitStart;
+        pes[i].waitStart = simTime;
+      }
       anyMultiplying |= pes[i].multiplying;
     }
-    if (!anyMultiplying) schedule(finishCalculate);
+    if (!anyMultiplying && !tileFinishing) {
+      tileFinishing = true;
+      schedule(finishCalculate);
+    }
   }
 }
 
@@ -127,15 +148,23 @@ void peRowDone(std::any any) {
   // all B fibers share a completed fiber Count. Once it is 0 that means all fibers for a row are completed.
   if (*args.fiberArgs.completedFiberCount <= 0) {
     if (canSendToDRAM(args.fiberArgs.row) || cDramWords == 0) {
-      schedule(prefetchA);
+      wakePrefetcher();
       if (cDramWords > 0) sendToDRAM(DRAMRequest{C_ROW, args.fiberArgs.row, cDramWords, endOfTile, simTime});
       if (*args.fiberArgs.hasIncrementedConcurrentCount) conccurrentMultiplyCount--;
       prefetchNow -= currsizeA[args.fiberArgs.row] * 3;
+      // pran: SeaCache's adaptive prefetch size. this used to be in slidePrefetchWindowGust,
+      // which nothing calls since the event-based model, so the prefetch size never changed
+      if (adaptive_prefetch && elements_processed_since_last_adjustment >= adjustment_interval) {
+        update_prefetch_size();
+        elements_processed_since_last_adjustment = 0;
+        prefetchAdjustments++;
+      }
       delete(args.fiberArgs.completedFiberCount); // delete to prevent memory leak
       delete(args.fiberArgs.hasIncrementedConcurrentCount);
     }
     else {
-      schedule(peRowDone, args, 10);
+      // channel queue is full: finish the row when it has space
+      waitForDRAMSpace(args.fiberArgs.row, peRowDone, args);
       return;
     }
   }
@@ -158,10 +187,14 @@ void printPEStats(long long totalCycles) {
     idle += peIdle[pe];
   }
   double peTime = (double)PEcnt * totalCycles;
-  printf("PE busy = %.1f%%, waiting for A = %.1f%%, waiting for B = %.1f%%, waiting for C = %.1f%%, idle at tile barrier = %.1f%%\n",
-         100.0 * busy / peTime, 100.0 * stallA / peTime, 100.0 * stallB / peTime, 100.0 * stallC / peTime,
-         100.0 * idle / peTime);
-  printf("StallA = %lld, StallB = %lld, StallC = %lld\n", stallA, stallB, stallC);
+  printf("PE busy = %.1f%%, idle = %.1f%%\n", 100.0 * busy / peTime, 100.0 * idle / peTime);
+  // pran: stallA/B/C add up the wait of every request, not the time PEs spent waiting,
+  // so they're printed as average latency per request instead of a % of PE time
+  printf("average latency: A row = %.1f cycles (%lld rows), B fiber = %.1f cycles (%lld fibers), "
+         "C write = %.1f cycles (%lld rows)\n",
+         stallACount ? (double)stallA / stallACount : 0.0, stallACount,
+         stallBCount ? (double)stallB / stallBCount : 0.0, stallBCount,
+         stallCCount ? (double)stallC / stallCCount : 0.0, stallCCount);
   printf("Per PE Busy:");
   for(int pe = 0; pe  < PEcnt; pe++) {
     printf(" pe%dBusy: %.1f%% ", pe, 100.0 * peBusy[pe] / totalCycles);

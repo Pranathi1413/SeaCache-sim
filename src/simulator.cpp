@@ -1855,6 +1855,7 @@ void updateCAccess(int ii) {
 FiberAccess accessFiberGust(int fiber, int row) {
   long long dramBefore = computeB, sramBefore = computeSramAccess;
   get_B_fiber(fiber, row);
+  // pran: [todo] should we model SRAM banks similar to the DRAM channels
   return {(computeB - dramBefore) * HBMbandwidthperPE, computeSramAccess - sramBefore};
 }
 
@@ -1984,8 +1985,10 @@ bool prefetchrow(int ii) {
     needsize = currsizeA[ii] * 3;
   }
 
-  // can't prefetch this row now
-  if (prefetchNow + needsize >= prefetchSize) {
+  // can't prefetch this row now.
+  // pran: [fix] if buffer is empty, it takes one row even if it's too big, it streams through.
+  // otherwise a row bigger than the whole buffer never gets in and the tile never finishes, abruptly putting the simulation to a standstill
+  if (prefetchNow > 0 && prefetchNow + needsize >= prefetchSize) {
     return 0;
   }
 
@@ -2099,11 +2102,14 @@ bool prefetchrow(int ii) {
               }
 
               if (hasinvalid == 0 && haszero == 0) {
-                prefetch_discards++;
+                prefetch_discards++; // pran: means we have prefetched more A rows than we have cache space for B rows? Check what adaptive prefetch does ehre
               }
             }
           }
         }
+        // pran: [todo] I think all of these LFU counter updates right now happen when row A is sent to DRAM and not when it arrives to DRAM, so it's early. This should be fixed later
+
+        // pran: [todo] The in-cache check here uses an exact tag match, but the lookup elsewhere uses a range for packed lines. So a fiber packed into another fiber’s line never gets its +1. This packing problem needs to be fixed, but it existed in original seacache as well.
 
         // if the updated flfu overlow, half the flfubit of the whole set!
         // both update in cache or virtual tag will cause the half
@@ -2368,7 +2374,11 @@ Only in two place :
 1) The iterate mode (compact or chained) (but the format is same)
 2) The unbuffered (missed) access
 */
+// event timing stats: cycles in the calculate phase of all tiles, how many tiles, when the last one ended
+long long tileStartTime, eventCalCycle, eventTiles, lastTileEnd;
+
 void calculate(std::any any) {
+  tileStartTime = simTime;
   computePE = computeDramAccess = computeSramAccess = 0;
   for (int p = 0; p < PEcnt; p++) perPEWork[p] = 0; // Hari: reset per-PE tracking each tile
 
@@ -2581,6 +2591,9 @@ void finishCalculate(std::any any) {
                                                        computeSramAccess / sramBank));
   totalCycle += oldTileCycles;
   calCycle += oldTileCycles;
+  eventCalCycle += simTime - tileStartTime;
+  eventTiles++;
+  lastTileEnd = simTime;
 
   totalSram += computeSramAccess / sramBank;
   totalDram += computeDramAccess / PEcnt;
@@ -2589,45 +2602,6 @@ void finishCalculate(std::any any) {
   // pran: gust already moved the clock with PE events, inner/outer still take the old tile time
   long long delay = (dataflow == Gust) ? 0 : oldTileCycles;
   schedule(inner_loop_after_calculate, {}, delay);
-}
-
-void prefetchPrefillWindowGust(std::any any) {
-  // First prefill the prefetch window.
-  for (int ii = 0; prefetchNow < prefetchSize && ii < iii; ii++) {
-    if (TI + ii > I)
-      break;
-
-    prefetchRowNow = TI + ii;
-    if (!prefetchrow(TI + ii)) {
-      break;
-    }
-  }
-}
-
-// same prefetch window update as before: after row ii is used, prefetch more rows of A
-void slidePrefetchWindowGust(int ii) {
-  int needsize = currsizeA[TI + ii] * 3;
-  if (prefetchNow > needsize) {
-    prefetchNow -= needsize;
-  }
-
-  if (prefetchNow >= prefetchSize) {
-    return;
-  }
-
-  while (prefetchRowNow < TI + iii) {
-    if (!prefetchrow(prefetchRowNow)) {
-      break;
-    }
-    prefetchRowNow++;
-  }
-
-  if (adaptive_prefetch) {
-    if (elements_processed_since_last_adjustment >= adjustment_interval) {
-      update_prefetch_size();
-      elements_processed_since_last_adjustment = 0;
-    }
-  }
 }
 
 void post_calculate_store() {
@@ -2788,8 +2762,13 @@ void postTileMerge() {
 // run now simply iterates though the loop until it is empty.
 // It is the job of the loop elements to add new items to the queue as the simulator runs.
 // Each element runs 'delay' cycles after it's scheduled, and the clock (simTime) jumps to it.
+// set when finishRun prints the results
+bool runFinished = false;
+
 void run() {
   simTime = 0;
+  runFinished = false;
+  eventCalCycle = eventTiles = lastTileEnd = 0;
   initPEs();
   initMemory();
 
@@ -2800,6 +2779,14 @@ void run() {
     LoopQueue.pop();
     simTime = entry.time;
     entry.queueFunc(entry.args);
+  }
+
+  // pran: if nothing is left to run but finishRun never ran, some unit stopped waking the next one.
+  // say so instead of silently writing an output file with no results
+  if (!runFinished) {
+    printf("\n!!! simulation stopped at cycle %lld before the run finished (TI=%d TJ=%d TK=%d)\n",
+           simTime, TI, TJ, TK);
+    fprintf(stderr, "simulation stopped at cycle %lld before the run finished\n", simTime);
   }
 }
 
@@ -2880,11 +2867,18 @@ void finishRun(std::any any) {
   analyze_statistics();
 
   // pran: the final merge has no events yet either, so add the old merge time at the end
+  // pran: [todo] should we add events to this final merges as well?
   long long total = simTime + (postCycle - mergeBefore);
   printf("\n***** event timing *****\n");
   printf("event total cycle = %lld\n", total);
+  // pran: event total = load + multiply + waiting for the last DRAM writes + merge
+  printf("event load cycle = %lld (old formula), event multiply cycle = %lld (%lld tiles), "
+         "waiting for last DRAM writes = %lld, merge = %lld (old formula)\n",
+         preCycle, eventCalCycle, eventTiles, simTime - lastTileEnd, postCycle - mergeBefore);
+  printf("prefetch size at end = %d words (adjusted %lld times)\n", prefetchSize, prefetchAdjustments);
   printPEStats(total);
   printMemoryStats(total);
+  runFinished = true;
 }
 
 void runTile(bool isest, int iii, int jjj, int kkk, long long tti,

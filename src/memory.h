@@ -22,6 +22,7 @@ void initMemory();
 void sendToDRAM(std::any any);   // a DRAMRequest
 void requestFiber(std::any any); // a FiberArgs (pe.h)
 bool canSendToDRAM(int id);
+void waitForDRAMSpace(int id, void (*func)(std::any), std::any args);
 
 // what the cache says about one fiber (in simulator.cpp)
 struct FiberAccess {

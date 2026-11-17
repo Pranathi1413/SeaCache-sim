@@ -15,7 +15,6 @@ struct RowInfo {
   bool* hasIncrementedConcurrentCount;
 };
 RowInfo startRowGust(int row);
-void slidePrefetchWindowGust(int ii);
 
 // one B fiber a PE asks for
 struct FiberArgs {
@@ -30,6 +29,9 @@ bool peReady(int pe);
 void wakeAllIdlePes();
 
 extern long long stallA, stallB, stallC;
+extern long long stallACount, stallBCount, stallCCount;
+extern bool tileFinishing;
+extern long long prefetchAdjustments;
 
 // events
 void peTakeRow(std::any any);

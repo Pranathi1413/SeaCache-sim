@@ -37,3 +37,9 @@ nohup.out
 hyte
 scache
 .vscode/
+# made by compare/run_compare.sh
+compare/results/
+compare/logs/
+compare/bin/
+compare/original_src/
+compare/config_*.json

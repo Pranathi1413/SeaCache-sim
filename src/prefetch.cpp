@@ -15,40 +15,58 @@ int maxConcurrentMultiply = 32;
 long long aFetchCount = 0;
 long long bFetchCount = 0;
 
+// pran: [fix] true while a prefetchA is scheduled or waiting for DRAM space.
+// without it every finished row started another prefetchA chain, so many ran at once
+bool prefetchPending = false;
+
 // reset prefetch values at start of new tile
 void initPrefetch() {
     currentII = 0;
-    schedule(prefetchA);
+    prefetchPending = false;
+    tileFinishing = false;
+    wakePrefetcher();
+}
+
+// wake the prefetcher, unless it's already scheduled
+void wakePrefetcher(long long delay) {
+    if (prefetchPending) return;
+    prefetchPending = true;
+    schedule(prefetchA, {}, delay);
 }
 
 void prefetchA(std::any any) {
+    prefetchPending = false;
     int initialII = currentII;
 
     // need to prefetch the next ii+prefetchsize+1
     if (prefetchNow >= prefetchSize) return;
 
     int prefetchCount = 0;
-    bool wasBlocked = false;
     // schedule prefetch for up to dramChannels
     for (; prefetchNow < prefetchSize && currentII < iii && currentII < (initialII + dramChannels); currentII++) {
         if (TI + currentII > I)
         break;
 
         prefetchRowNow = TI + currentII;
-        if (!canSendToDRAM(prefetchRowNow)) { wasBlocked = true; break; }
+        // channel queue is full: run again when it has space
+        if (!canSendToDRAM(prefetchRowNow)) {
+            prefetchPending = true;
+            waitForDRAMSpace(prefetchRowNow, prefetchA, {});
+            break;
+        }
 
         // return 0 if can't prefetch that row now
         if (!prefetchrow(prefetchRowNow)) {
         break;
         }
-        
+
         prefetchCount++; aFetchCount++;
         sendToDRAM(DRAMRequest{A_ROW, prefetchRowNow, currsizeA[prefetchRowNow] * 3.0, false, simTime});
     }
-    
+
     // Confirm there was space before prefetching again
-    if (prefetchCount) schedule(prefetchA, NULL, prefetchCount); // prefetchCount cycles to prefetch prefetchCount As
-    if (wasBlocked) schedule(prefetchA, NULL, 10);
+    // pran: [todo] even empty rows adds to prefetchCount, and that can cause waiting for extra cycles of delay for no reason, I think
+    if (prefetchCount) wakePrefetcher(prefetchCount); // prefetchCount cycles to prefetch prefetchCount As
 }
 
 void getBFibers(std::any any) {
@@ -62,7 +80,8 @@ void getBFibers(std::any any) {
         else break;
     }
 
-    if (info.fetchedFiberIndex < info.fibers.size()) schedule(getBFibers, info, 10);
+    // channel queue is full: ask for the rest when it has space
+    if (info.fetchedFiberIndex < info.fibers.size()) waitForDRAMSpace(info.fibers[info.fetchedFiberIndex], getBFibers, info);
     else aFetchCount--;
 }
 
@@ -85,6 +104,7 @@ void fiberAReady(std::any any) {
     *hasIncremented = false;
     info.hasIncrementedConcurrentCount = hasIncremented;
     stallA += simTime - args.requestInitTime;
+    stallACount++;
 
     getBFibers(info);
 }
@@ -93,6 +113,7 @@ void fiberAReady(std::any any) {
 void fiberBReady(std::any any) {
     FiberArgs args = std::any_cast<FiberArgs>(any);
     stallB += simTime - args.requestInitTime;
+    stallBCount++;
     bool found = false;
     for (int pe = 0; pe < PEcnt; pe++) {
         // Find PE ready to execute multiply
@@ -123,4 +144,5 @@ void fiberBReady(std::any any) {
 void fiberCDone(std::any any) {
     DRAMRequest req = std::any_cast<DRAMRequest>(any);
     stallC += simTime - req.requestInitTime;
+    stallCCount++;
 }

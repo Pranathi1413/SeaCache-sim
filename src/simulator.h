@@ -6,6 +6,7 @@ extern int prefetchSize;
 extern int prefetchNow, prefetchRowNow;
 bool prefetchrow(int ii);
 extern bool adaptive_prefetch;
+void update_prefetch_size();
 
 extern int minBlock;
 

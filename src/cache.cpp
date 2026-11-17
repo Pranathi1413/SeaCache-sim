@@ -221,6 +221,7 @@ bool cacheHitPracticalLFU(long long addr, bool isfirst, long long firstaddr) {
   for (int i = 0; i < SETASSOC; i++) {
     if (Valid[_set][i]) {
       // fuzzy compare
+      //pran: [todo] this is what I said by tag check being inconsistent (check the other todo comment)
       if ((Tag[_set][i] <= _tag) && (_tag < Tag[_set][i] + Cnt[_set][i] + 1)) {
 
         if (!isfirst) {
@@ -464,6 +465,7 @@ void cacheReplacePracticalLFU(long long addr, bool isfirst,
       }
 
       // a slot in cache has lfu less then this in virtual. replace.
+      // pran: [todo] this requires to happen at DRAM arrival for this B row right?
       if (replacelfu < virtuallfubit[_set][virtualindex]) {
         // update metadata in cache (config to the current access)
         Valid[_set][replaceindex] = 1;

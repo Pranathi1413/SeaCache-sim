@@ -65,7 +65,6 @@ void finishCalculate(std::any any);
 
 // Gust Dataflow Functions
 void calculateGust(std::any any);
-void prefetchPrefillWindowGust(std::any any);
 
 // Inner Dataflow Functions - TODO: make more granular
 void calculateInner(std::any any);

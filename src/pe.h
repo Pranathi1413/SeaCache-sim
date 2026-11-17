@@ -26,6 +26,7 @@ struct FiberArgs {
   bool* hasIncrementedConcurrentCount; 
   FiberAccess access;
   bool isInitialFiberRequest;
+  long long bReadyTime;
 };
 struct PEArgs {
   FiberArgs fiberArgs; int pe; bool hasFinished;
@@ -36,6 +37,7 @@ bool peReady(int pe);
 void wakeAllIdlePes();
 
 extern long long stallA, stallB, stallC;
+extern long long delayPrefetch, delayBFetch, delayWriteback, delayMultiply;
 
 // events
 void peTakeRow(std::any any);

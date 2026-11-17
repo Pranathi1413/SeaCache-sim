@@ -118,7 +118,7 @@ void requestFiberFromDRAM(std::any any) {
   if (canSendToDRAM(args.fiber)) {
     misses++;
     sendToDRAM(DRAMRequest{B_FIBER, args.fiber, access.dramWords});
-  } else schedule(requestFiberFromDRAM, args, blockedDRAMRequestWaitTime);
+  } else { schedule(requestFiberFromDRAM, args, blockedDRAMRequestWaitTime); delayBFetch += blockedDRAMRequestWaitTime; }
 }
 
 void requestFiber(std::any any) {

@@ -17,6 +17,7 @@ std::vector<PE> pes;
 std::vector<long long> peBusy, peStallA, peStallB, peIdle, peDoneAt;
 
 long long stallA = 0, stallB = 0, stallC = 0;
+long long delayPrefetch = 0, delayBFetch = 0, delayWriteback = 0, delayMultiply = 0;
 
 void initPEs() {
   pes.assign(PEcnt, PE());
@@ -62,6 +63,7 @@ void peTakeRow(std::any any) {
     conccurrentMultiplyCount++;
     for(int i = 1; i < waitingFibers.size(); ++i) readyFibers.push(waitingFibers[i]);
     fibersWaitingToStart.erase(beginIter);
+    delayMultiply += simTime - args.bReadyTime;
 
     peFiberReady(PEArgs{args, pe});
     wakeAllIdlePes();
@@ -136,6 +138,7 @@ void peRowDone(std::any any) {
     }
     else {
       schedule(peRowDone, args, blockedDRAMRequestWaitTime);
+      delayWriteback += blockedDRAMRequestWaitTime;
       return;
     }
   }
@@ -162,6 +165,7 @@ void printPEStats(long long totalCycles) {
          100.0 * busy / peTime, 100.0 * stallA / peTime, 100.0 * stallB / peTime, 100.0 * stallC / peTime,
          100.0 * idle / peTime);
   printf("StallA = %lld, StallB = %lld, StallC = %lld\n", stallA, stallB, stallC);
+  printf("delayPrefetch = %lld, delayBFetch = %lld, delayWriteback = %lld, delayMultiply = %lld\n", delayPrefetch, delayBFetch, delayWriteback, delayMultiply);
   printf("Per PE Busy:");
   for(int pe = 0; pe  < PEcnt; pe++) {
     printf(" pe%dBusy: %.1f%% ", pe, 100.0 * peBusy[pe] / totalCycles);

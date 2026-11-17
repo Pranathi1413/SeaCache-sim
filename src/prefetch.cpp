@@ -48,7 +48,7 @@ void prefetchA(std::any any) {
     
     // Confirm there was space before prefetching again
     if (prefetchCount) schedule(prefetchA, NULL, prefetchCount); // prefetchCount cycles to prefetch prefetchCount As
-    if (wasBlocked) schedule(prefetchA, NULL, blockedDRAMRequestWaitTime);
+    if (wasBlocked) { schedule(prefetchA, NULL, blockedDRAMRequestWaitTime); delayPrefetch += blockedDRAMRequestWaitTime; }
 }
 
 void getBFibers(std::any any) {
@@ -89,6 +89,7 @@ void fiberAReady(std::any any) {
 void fiberBReady(std::any any) {
     FiberArgs args = std::any_cast<FiberArgs>(any);
     stallB += simTime - args.requestInitTime;
+    args.bReadyTime = simTime;
     bool found = false;
     for (int pe = 0; pe < PEcnt; pe++) {
         // Find PE ready to execute multiply
@@ -100,7 +101,7 @@ void fiberBReady(std::any any) {
             peFiberReady(PEArgs{args, pe});
             // If fibers were wating, add to readyFibers then wake PEs
             if (fibersWaitingToStart.find(args.row) != fibersWaitingToStart.end()) {
-                for(auto args: fibersWaitingToStart[args.row]) readyFibers.push(args);
+                for(auto args: fibersWaitingToStart[args.row]) { readyFibers.push(args); delayMultiply += simTime - args.bReadyTime; }
                 fibersWaitingToStart.erase(args.row);
                 wakeAllIdlePes();
             }
